@@ -28,6 +28,46 @@ const normaliseImages = (raw) => {
     });
 };
 
+// ── Helper: build a safe numeric update payload from the UI form ──────────────
+// The UI sends all fields; we coerce types and strip undefined/null-ish values
+// so Mongoose validators don't choke on empty strings.
+const sanitisePropertyBody = (body) => {
+  const b = { ...body };
+
+  // ── Numeric coercions ──────────────────────────────────────────
+  const toFloat = (v) => (v !== undefined && v !== null && v !== '') ? parseFloat(v) : null;
+  const toInt   = (v) => (v !== undefined && v !== null && v !== '') ? parseInt(v, 10) : null;
+
+  // Plot / Open Plots
+  if ('sqy'         in b) b.sqy         = toFloat(b.sqy);
+  if ('acres'       in b) b.acres       = toFloat(b.acres);
+  if ('totalPlots'  in b) b.totalPlots  = toInt(b.totalPlots);
+  if ('minSqy'      in b) b.minSqy      = toFloat(b.minSqy);
+  if ('maxSqy'      in b) b.maxSqy      = toFloat(b.maxSqy);
+  if ('pricePerSqy' in b) b.pricePerSqy = toFloat(b.pricePerSqy);
+
+  // Apartment / Villa
+  if ('floors'      in b) b.floors      = toInt(b.floors);
+  if ('totalUnits'  in b) b.totalUnits  = toInt(b.totalUnits);
+  if ('minSft'      in b) b.minSft      = toFloat(b.minSft);
+  if ('maxSft'      in b) b.maxSft      = toFloat(b.maxSft);
+  if ('pricePerSft' in b) b.pricePerSft = toFloat(b.pricePerSft);
+
+  // Pricing
+  if ('totalPrice'  in b) b.totalPrice  = toFloat(b.totalPrice);
+  if ('price'       in b) b.price       = toFloat(b.price);
+
+  // ── Empty-string → null for optional string fields ─────────────
+  const nullIfEmpty = (v) => (v === '' ? null : v);
+  ['projectStatus', 'badge', 'facing', 'plotType', 'unitType',
+   'developer', 'possession', 'rera', 'brochureLink',
+   'totalPriceLabel', 'priceLabel'].forEach(key => {
+    if (key in b) b[key] = nullIfEmpty(b[key]);
+  });
+
+  return b;
+};
+
 // ═══════════════════════════════════════════════════════════════
 // GET /api/properties
 // PUBLIC  → shows ALL active properties (isActive: true)
@@ -38,6 +78,7 @@ exports.getProperties = asyncHandler(async (req, res) => {
   const {
     type, status, subtype, locality, city,
     minPrice, maxPrice, beds, featured, badge,
+    isActive,
     search,
     sort    = '-createdAt',
     page    = 1,
@@ -47,6 +88,11 @@ exports.getProperties = asyncHandler(async (req, res) => {
 
   // ── Base filter ──────────────────────────────────────────────
   const filter = showAll === 'true' ? {} : { isActive: true };
+
+  // ── isActive override (admin filter bar) ─────────────────────
+  if (showAll === 'true' && isActive !== undefined && isActive !== '') {
+    filter.isActive = isActive === 'true';
+  }
 
   // ── Optional filters ─────────────────────────────────────────
   if (type     && type     !== 'All' && type     !== '') filter.type   = type;
@@ -63,22 +109,27 @@ exports.getProperties = asyncHandler(async (req, res) => {
     filter['location.city'] = { $regex: new RegExp(city.trim(), 'i') };
 
   if (beds && beds !== '')
-    filter.beds = parseInt(beds);
+    filter.beds = parseInt(beds, 10);
 
   if (featured === 'true')  filter.featured = true;
   if (featured === 'false') filter.featured = false;
 
-  // ── Price range ──────────────────────────────────────────────
+  // ── Price range — checks both totalPrice and price fields ─────
   if ((minPrice && minPrice !== '') || (maxPrice && maxPrice !== '')) {
-    filter.price = {};
-    if (minPrice && minPrice !== '') filter.price.$gte = parseInt(minPrice);
-    if (maxPrice && maxPrice !== '') filter.price.$lte = parseInt(maxPrice);
+    const priceFilter = {};
+    if (minPrice && minPrice !== '') priceFilter.$gte = parseInt(minPrice, 10);
+    if (maxPrice && maxPrice !== '') priceFilter.$lte = parseInt(maxPrice, 10);
+    // Match on either totalPrice or legacy price field
+    filter.$or = [
+      { totalPrice: priceFilter },
+      { price:      priceFilter },
+    ];
   }
 
   // ── Full-text search (regex — no index required) ─────────────
   if (search && search.trim() !== '') {
     const q = search.trim();
-    filter.$or = [
+    const searchOr = [
       { title:               { $regex: new RegExp(q, 'i') } },
       { description:         { $regex: new RegExp(q, 'i') } },
       { 'location.locality': { $regex: new RegExp(q, 'i') } },
@@ -86,6 +137,13 @@ exports.getProperties = asyncHandler(async (req, res) => {
       { developer:           { $regex: new RegExp(q, 'i') } },
       { subtype:             { $regex: new RegExp(q, 'i') } },
     ];
+    // Merge with any existing $or (e.g. price range)
+    if (filter.$or) {
+      filter.$and = [{ $or: filter.$or }, { $or: searchOr }];
+      delete filter.$or;
+    } else {
+      filter.$or = searchOr;
+    }
   }
 
   // ── Pagination ───────────────────────────────────────────────
@@ -156,7 +214,7 @@ exports.getStats = asyncHandler(async (req, res) => {
     Property.find({ isActive: true })
       .sort('-views')
       .limit(5)
-      .select('title price priceLabel views enquiries location.locality badge type subtype'),
+      .select('title totalPrice totalPriceLabel price priceLabel views enquiries location.locality badge type subtype'),
   ]);
 
   res.json({
@@ -192,7 +250,7 @@ exports.getPropertyById = asyncHandler(async (req, res) => {
   if (!property)
     return res.status(404).json({ success: false, message: 'Property not found' });
 
-  // Increment views — non-blocking, no await needed
+  // Increment views — non-blocking
   Property.findByIdAndUpdate(property._id, { $inc: { views: 1 } }).exec();
 
   // 3 related properties of same type
@@ -202,23 +260,18 @@ exports.getPropertyById = asyncHandler(async (req, res) => {
     isActive: true,
   })
     .limit(3)
-    .select('title price priceLabel location images status beds baths area badge type subtype slug');
+    .select('title totalPrice totalPriceLabel price priceLabel location images status beds baths area badge type subtype slug');
 
   res.json({ success: true, property, related });
 });
 
 // ═══════════════════════════════════════════════════════════════
 // POST /api/properties  (admin)
-// ─────────────────────────────────────────────────────────────
-// FIX: Static admins have non-ObjectId IDs like "static-admin-001".
-//      Only set createdBy when req.user._id is a real 24-char ObjectId.
-//      If your Property model has createdBy as required:true, make it
-//      optional (required: false) — see Property.model.js note below.
 // ═══════════════════════════════════════════════════════════════
 exports.createProperty = asyncHandler(async (req, res) => {
-  const body = { ...req.body };
+  let body = sanitisePropertyBody(req.body);
 
-  // Normalise images — accept uploaded files (already { url, publicId }) or plain URL strings
+  // Normalise images
   if (body.images !== undefined) {
     body.images = normaliseImages(body.images);
   }
@@ -227,6 +280,11 @@ exports.createProperty = asyncHandler(async (req, res) => {
   // Static admins (e.g. "static-admin-001") are NOT valid ObjectIds — skip them.
   if (req.user?._id && isValidObjectId(String(req.user._id))) {
     body.createdBy = req.user._id;
+  }
+
+  // Mirror totalPrice → price for backward-compat (search filters, etc.)
+  if (body.totalPrice && !body.price) {
+    body.price = body.totalPrice;
   }
 
   const property = await Property.create(body);
@@ -242,9 +300,9 @@ exports.createProperty = asyncHandler(async (req, res) => {
 // PUT /api/properties/:id  (admin)
 // ═══════════════════════════════════════════════════════════════
 exports.updateProperty = asyncHandler(async (req, res) => {
-  const update = { ...req.body };
+  let update = sanitisePropertyBody(req.body);
 
-  // Protect immutable system fields — never allow these to be overwritten
+  // Protect immutable system fields
   delete update.slug;
   delete update.createdBy;
   delete update.__v;
@@ -261,6 +319,11 @@ exports.updateProperty = asyncHandler(async (req, res) => {
     if (existing) {
       update.images = [...(existing.images || []), ...update.images];
     }
+  }
+
+  // Mirror totalPrice → price for backward-compat
+  if (update.totalPrice !== undefined && update.totalPrice !== null && !update.price) {
+    update.price = update.totalPrice;
   }
 
   const property = await Property.findByIdAndUpdate(
