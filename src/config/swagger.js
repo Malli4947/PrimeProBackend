@@ -29,7 +29,7 @@ Demo credentials:
 
 Click **Authorize** at the top and paste your token.
       `,
-      contact: { name: 'PrimePro Support', email: 'info@primepro.in' },
+      contact: { name: 'PrimePro Support', email: 'primeproprojects@gmail.com' },
     },
     servers: [
       { url: 'http://localhost:3000', description: 'Local Development' },
@@ -156,6 +156,14 @@ Click **Authorize** at the top and paste your token.
             beds:        { type: 'number', nullable: true, example: 4 },
             baths:       { type: 'number', nullable: true, example: 4 },
             area:        { type: 'string', example: '4,200 sq.ft' },
+            acres:       { type: 'number', nullable: true, example: 2.5, description: 'Land area in acres' },
+            floors:      { type: 'number', nullable: true, example: 12, description: 'Total floors in the project' },
+            totalUnits:  { type: 'number', nullable: true, example: 120, description: 'Total units in the project' },
+            minSft:      { type: 'number', nullable: true, example: 1200, description: 'Minimum unit size in sq.ft' },
+            maxSft:      { type: 'number', nullable: true, example: 2400, description: 'Maximum unit size in sq.ft' },
+            unitTypes:   { type: 'array', items: { type: 'string' }, example: ['2 BHK', '3 BHK'], description: 'Available unit types' },
+            pricePerSft: { type: 'number', nullable: true, example: 6500, description: 'Price per sq.ft in ₹' },
+            totalPrice:  { type: 'number', nullable: true, example: 7800000, description: 'Total price in ₹' },
             location:    { $ref: '#/components/schemas/PropertyLocation' },
             images:      { type: 'array', items: { $ref: '#/components/schemas/PropertyImage' } },
             image:       { type: 'string', description: 'Virtual — primary image URL', example: 'https://images.unsplash.com/...' },
@@ -163,7 +171,7 @@ Click **Authorize** at the top and paste your token.
             developer:   { type: 'string', example: 'Rajapushpa Group' },
             possession:  { type: 'string', example: 'Ready to Move' },
             rera:        { type: 'string', example: 'P02400003987' },
-            badge:       { type: 'string', nullable: true, enum: ['Premium', 'Featured', 'Hot', 'New Launch', 'Lease', 'Commercial', null] },
+            badge:       { type: 'string', nullable: true, enum: ['Premium', 'Featured', 'Hot', 'New Launch', 'Ready to Move', 'Pre Launch', 'Under Construction', 'Commercial', 'Lease', 'Rent', null] },
             featured:    { type: 'boolean', example: true },
             isActive:    { type: 'boolean', example: true },
             views:       { type: 'number', example: 342 },
@@ -188,12 +196,35 @@ Click **Authorize** at the top and paste your token.
             beds:        { type: 'number', example: 4 },
             baths:       { type: 'number', example: 4 },
             area:        { type: 'string', example: '4,200 sq.ft' },
+            acres:       { type: 'number', example: 2.5, description: 'Land area in acres' },
+            floors:      { type: 'number', example: 12, description: 'Total floors in the project' },
+            totalUnits:  { type: 'number', example: 120, description: 'Total units in the project' },
+            minSft:      { type: 'number', example: 1200, description: 'Minimum unit size in sq.ft' },
+            maxSft:      { type: 'number', example: 2400, description: 'Maximum unit size in sq.ft' },
+            unitTypes:   { type: 'array', items: { type: 'string' }, example: ['2 BHK', '3 BHK'], description: 'Available unit types e.g. 2 BHK, 3 BHK' },
+            pricePerSft: { type: 'number', example: 6500, description: 'Price per sq.ft in ₹' },
+            totalPrice:  { type: 'number', example: 7800000, description: 'Total price in ₹' },
             location:    { $ref: '#/components/schemas/PropertyLocation' },
             amenities:   { type: 'array', items: { type: 'string' }, example: ['Swimming Pool', 'Gym'] },
+            images: {
+              type: 'array',
+              description: 'Multiple images — each item can be a plain URL string OR an image object from the upload API. Mix both freely.',
+              items: {
+                oneOf: [
+                  { type: 'string', example: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9' },
+                  { $ref: '#/components/schemas/PropertyImage' },
+                ],
+              },
+              example: [
+                'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9',
+                { url: 'https://images.unsplash.com/photo-2', isPrimary: false, caption: 'Living Room' },
+                { url: 'https://techmate-pro.s3.ap-south-1.amazonaws.com/primepro/properties/abc.jpg', publicId: 'primepro/properties/abc.jpg', isPrimary: true },
+              ],
+            },
             developer:   { type: 'string', example: 'Rajapushpa Group' },
             possession:  { type: 'string', example: 'Ready to Move' },
             rera:        { type: 'string', example: 'P02400003987' },
-            badge:       { type: 'string', nullable: true },
+            badge:       { type: 'string', nullable: true, enum: ['Premium', 'Featured', 'Hot', 'New Launch', 'Ready to Move', 'Pre Launch', 'Under Construction', 'Commercial', 'Lease', 'Rent', null] },
             featured:    { type: 'boolean', example: false },
           },
         },
@@ -259,6 +290,8 @@ Click **Authorize** at the top and paste your token.
             description:   { type: 'string', example: 'Apartments, Villas, Row Houses & Duplexes' },
             icon:          { type: 'string', example: '🏠' },
             color:         { type: 'string', example: '#3B82F6' },
+            image:         { type: 'string', nullable: true, description: 'Primary image URL (legacy single field)' },
+            images:        { type: 'array', items: { $ref: '#/components/schemas/PropertyImage' }, description: 'Multiple images' },
             sortOrder:     { type: 'number', example: 1 },
             isActive:      { type: 'boolean', example: true },
             propertyCount: { type: 'number', example: 6 },
@@ -272,6 +305,21 @@ Click **Authorize** at the top and paste your token.
             description: { type: 'string', example: 'Apartments, Villas, Row Houses & Duplexes' },
             icon:        { type: 'string', example: '🏠' },
             color:       { type: 'string', example: '#3B82F6' },
+            image:       { type: 'string', example: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9', description: 'Single image URL (legacy)' },
+            images: {
+              type: 'array',
+              description: 'Multiple images — each item can be a URL string or an image object',
+              items: {
+                oneOf: [
+                  { type: 'string', example: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9' },
+                  { $ref: '#/components/schemas/PropertyImage' },
+                ],
+              },
+              example: [
+                'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9',
+                { url: 'https://images.unsplash.com/photo-2', isPrimary: false, caption: 'Interior' },
+              ],
+            },
             sortOrder:   { type: 'number', example: 1 },
             isActive:    { type: 'boolean', default: true },
           },
@@ -293,6 +341,35 @@ Click **Authorize** at the top and paste your token.
                 backgroundImage: 'https://images.unsplash.com/...',
               },
             },
+            images: {
+              type: 'array',
+              description: 'Multiple images for this CMS section — URL strings or image objects',
+              items: {
+                oneOf: [
+                  { type: 'string', example: 'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9' },
+                  { $ref: '#/components/schemas/PropertyImage' },
+                ],
+              },
+              example: [
+                'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9',
+                { url: 'https://images.unsplash.com/photo-2', isPrimary: false, caption: 'Banner 2' },
+              ],
+            },
+            appendImages: {
+              type: 'boolean',
+              default: false,
+              description: 'If true, new images are appended to existing ones instead of replacing',
+            },
+          },
+        },
+        CMSResponse: {
+          type: 'object',
+          properties: {
+            success: { type: 'boolean' },
+            key:     { type: 'string', example: 'hero' },
+            value:   { type: 'object' },
+            images:  { type: 'array', items: { $ref: '#/components/schemas/PropertyImage' } },
+            label:   { type: 'string' },
           },
         },
 
@@ -301,21 +378,22 @@ Click **Authorize** at the top and paste your token.
           type: 'object',
           properties: {
             success:  { type: 'boolean', example: true },
-            url:      { type: 'string',  example: 'https://res.cloudinary.com/demo/image/upload/v1/primepro/properties/abc123.jpg' },
-            publicId: { type: 'string',  example: 'primepro/properties/abc123' },
+            url:      { type: 'string',  example: 'https://techmate-pro.s3.ap-south-1.amazonaws.com/primepro/properties/abc123.jpg' },
+            publicId: { type: 'string',  example: 'primepro/properties/abc123', nullable: true },
           },
         },
         UploadMultipleResponse: {
           type: 'object',
           properties: {
             success: { type: 'boolean', example: true },
+            count:   { type: 'number',  example: 3 },
             images:  {
               type: 'array',
               items: {
                 type: 'object',
                 properties: {
-                  url:      { type: 'string' },
-                  publicId: { type: 'string' },
+                  url:      { type: 'string', example: 'https://techmate-pro.s3.ap-south-1.amazonaws.com/primepro/properties/img1.jpg' },
+                  publicId: { type: 'string', example: 'primepro/properties/img1.jpg', nullable: true },
                 },
               },
             },

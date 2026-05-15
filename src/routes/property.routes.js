@@ -40,7 +40,7 @@ const { protectAdmin, optionalAuth } = require('../middleware/auth.middleware');
  *       - { in: query, name: maxPrice, schema: { type: number }, example: 50000000 }
  *       - { in: query, name: beds,     schema: { type: number }, example: 3 }
  *       - { in: query, name: featured, schema: { type: string, enum: [true,false] } }
- *       - { in: query, name: badge,    schema: { type: string, enum: [Premium,Featured,Hot,New Launch,Commercial,Lease] } }
+ *       - { in: query, name: badge,    schema: { type: string, enum: [Premium,Featured,Hot,New Launch,Ready to Move,Pre Launch,Under Construction,Commercial,Lease,Rent] } }
  *       - { in: query, name: search,   schema: { type: string }, example: penthouse }
  *       - { in: query, name: sort,     schema: { type: string }, example: -createdAt }
  *       - { in: query, name: page,     schema: { type: integer, default: 1 } }

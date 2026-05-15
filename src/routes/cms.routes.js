@@ -5,6 +5,93 @@ const { protectAdmin } = require('../middleware/auth.middleware');
 
 /**
  * @swagger
+ * /api/cms/upload:
+ *   post:
+ *     summary: Upload images directly to a CMS key (Admin)
+ *     description: |
+ *       Upload one or more image files (multipart/form-data) and attach them to a CMS key in one step.
+ *
+ *       **Fields:**
+ *       - `images`   — one or more image files (field name must be `images`)
+ *       - `key`      — the CMS key to attach images to (e.g. `hero`, `banners`)
+ *       - `append`   — `"true"` to add to existing images; omit or `"false"` to replace
+ *       - `captions` — optional JSON array of caption strings, one per file
+ *
+ *       **Example (replace hero images):**
+ *       ```
+ *       POST /api/cms/upload
+ *       Content-Type: multipart/form-data
+ *       images: [file1.jpg, file2.jpg]
+ *       key: hero
+ *       append: false
+ *       ```
+ *     tags: [CMS]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         multipart/form-data:
+ *           schema:
+ *             type: object
+ *             required: [key, images]
+ *             properties:
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: binary
+ *               key:
+ *                 type: string
+ *                 example: hero
+ *               append:
+ *                 type: string
+ *                 enum: ["true", "false"]
+ *                 default: "false"
+ *               captions:
+ *                 type: string
+ *                 description: JSON array of captions e.g. '["Main banner","Secondary"]'
+ *     responses:
+ *       200:
+ *         description: Images uploaded and saved
+ *       400:
+ *         description: Missing key or no files
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
+router.post('/upload', protectAdmin, ctrl.uploadMiddleware, ctrl.uploadCMSImages);
+
+/**
+ * @swagger
+ * /api/cms/{key}/images/{publicId}:
+ *   delete:
+ *     summary: Remove a single image from a CMS key (Admin)
+ *     tags: [CMS]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: key
+ *         required: true
+ *         schema: { type: string }
+ *         example: hero
+ *       - in: path
+ *         name: publicId
+ *         required: true
+ *         schema: { type: string }
+ *         description: URL-encoded S3 key of the image
+ *     responses:
+ *       200:
+ *         description: Image removed
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
+router.delete('/:key/images/:publicId', protectAdmin, ctrl.deleteCMSImage);
+
+/**
+ * @swagger
  * /api/cms:
  *   get:
  *     summary: Get all CMS content
@@ -38,7 +125,7 @@ const { protectAdmin } = require('../middleware/auth.middleware');
  *                     about:
  *                       heading: Hyderabad's Most Trusted Real Estate Platform
  *                       yearsExperience: 12
- *                       email: info@primepro.in
+ *                       email: primeproprojects@gmail.com
  *                       phone: 1800 500 600
  *                     seo:
  *                       metaTitle: PrimePro — Premium Real Estate in Hyderabad

@@ -30,7 +30,7 @@ const CATEGORIES = [
 
 const CMS_DATA = [
   { key:'hero',    label:'Hero Section',   value:{ title:"Find Your Dream Property in Hyderabad", subtitle:"Discover 1,200+ verified listings. Zero brokerage. RERA compliant.", ctaText:"Browse Properties", backgroundImage:"https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1600&q=80" } },
-  { key:'about',   label:'About Section',  value:{ heading:"Hyderabad's Most Trusted Real Estate Platform", body:"PrimePro was founded in 2012 with a simple belief — buying or renting a home should be an exciting, not stressful, experience.", yearsExperience:12, email:"info@primepro.in", phone:"1800 500 600" } },
+  { key:'about',   label:'About Section',  value:{ heading:"Hyderabad's Most Trusted Real Estate Platform", body:"PrimePro was founded in 2012 with a simple belief — buying or renting a home should be an exciting, not stressful, experience.", yearsExperience:12, email:"primeproprojects@gmail.com", phone:"1800 500 600" } },
   { key:'seo',     label:'SEO Settings',   value:{ metaTitle:"PrimePro — Premium Real Estate in Hyderabad", metaDescription:"Find verified residential, commercial and agricultural properties in Hyderabad. No brokerage. RERA certified.", keywords:"real estate hyderabad, buy flat hyderabad, villa for sale, commercial property" } },
   { key:'banners', label:'Promo Banners',  value:[] },
 ];

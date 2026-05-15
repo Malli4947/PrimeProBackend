@@ -27,6 +27,16 @@ const propertySchema = new mongoose.Schema(
     area:       { type: String, required: true },
     areaValue:  { type: Number },
 
+    // Project specs
+    acres:       { type: Number, default: null },           // Land area in acres
+    floors:      { type: Number, default: null },           // Total floors in the project
+    totalUnits:  { type: Number, default: null },           // Total units in the project
+    minSft:      { type: Number, default: null },           // Minimum unit size (sq.ft)
+    maxSft:      { type: Number, default: null },           // Maximum unit size (sq.ft)
+    unitTypes:   [{ type: String }],                        // e.g. ['2 BHK', '3 BHK']
+    pricePerSft: { type: Number, default: null },           // Price per sq.ft (₹)
+    totalPrice:  { type: Number, default: null },           // Total price (₹) — can differ from price field
+
     // Location
     location: {
       address:  { type: String, required: true },
@@ -60,7 +70,7 @@ const propertySchema = new mongoose.Schema(
     reraVerified:{ type: Boolean, default: false },
 
     // Admin controls
-    badge:    { type: String, enum: ['Premium','Featured','Hot','New Launch','Lease','Commercial',null], default: null },
+    badge:    { type: String, enum: ['Premium','Featured','Hot','New Launch','Ready to Move','Pre Launch','Under Construction','Commercial','Lease','Rent',null], default: null },
     featured: { type: Boolean, default: false },
     isActive: { type: Boolean, default: true },
     isSold:   { type: Boolean, default: false },

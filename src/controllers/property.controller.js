@@ -4,6 +4,30 @@ const { asyncHandler } = require('../middleware/error.middleware');
 // ── Helper: check if a string is a valid MongoDB ObjectId ────────────────────
 const isValidObjectId = val => /^[0-9a-fA-F]{24}$/.test(val);
 
+// ── Helper: normalise incoming images ────────────────────────────────────────
+// Accepts:
+//   - Array of { url, publicId?, isPrimary?, caption? } objects  (from upload API)
+//   - Array of plain URL strings
+//   - A single URL string
+//   - undefined / null  → returns undefined (field not touched)
+const normaliseImages = (raw) => {
+  if (raw === undefined || raw === null) return undefined;
+  const arr = Array.isArray(raw) ? raw : [raw];
+  return arr
+    .filter(Boolean)
+    .map((item, idx) => {
+      if (typeof item === 'string') {
+        return { url: item, publicId: null, isPrimary: idx === 0, caption: '' };
+      }
+      return {
+        url:       item.url,
+        publicId:  item.publicId  ?? null,
+        isPrimary: item.isPrimary ?? idx === 0,
+        caption:   item.caption   ?? '',
+      };
+    });
+};
+
 // ═══════════════════════════════════════════════════════════════
 // GET /api/properties
 // PUBLIC  → shows ALL active properties (isActive: true)
@@ -194,14 +218,16 @@ exports.getPropertyById = asyncHandler(async (req, res) => {
 exports.createProperty = asyncHandler(async (req, res) => {
   const body = { ...req.body };
 
+  // Normalise images — accept uploaded files (already { url, publicId }) or plain URL strings
+  if (body.images !== undefined) {
+    body.images = normaliseImages(body.images);
+  }
+
   // Only attach createdBy when the logged-in user has a real MongoDB ObjectId.
   // Static admins (e.g. "static-admin-001") are NOT valid ObjectIds — skip them.
   if (req.user?._id && isValidObjectId(String(req.user._id))) {
     body.createdBy = req.user._id;
   }
-  // If you need to track which static admin created the property, use a
-  // separate string field instead:
-  // body.createdByEmail = req.user?.email;
 
   const property = await Property.create(body);
 
@@ -223,6 +249,19 @@ exports.updateProperty = asyncHandler(async (req, res) => {
   delete update.createdBy;
   delete update.__v;
   delete update._id;
+
+  // Normalise images if provided
+  if (update.images !== undefined) {
+    update.images = normaliseImages(update.images);
+  }
+
+  // Allow appending images instead of replacing — pass ?append=true
+  if (req.query.append === 'true' && update.images?.length) {
+    const existing = await Property.findById(req.params.id).select('images');
+    if (existing) {
+      update.images = [...(existing.images || []), ...update.images];
+    }
+  }
 
   const property = await Property.findByIdAndUpdate(
     req.params.id,

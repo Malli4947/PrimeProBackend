@@ -8,7 +8,15 @@ const categorySchema = new mongoose.Schema(
     description: { type: String, default: '' },
     icon:        { type: String, default: '🏠' },
     color:       { type: String, default: '#3B82F6' },
-    image:       { type: String, default: null },
+    image:       { type: String, default: null },  // Single image (legacy)
+    images: [
+      {
+        url:       { type: String, required: true },
+        publicId:  { type: String },
+        isPrimary: { type: Boolean, default: false },
+        caption:   { type: String },
+      },
+    ],
     sortOrder:   { type: Number, default: 1 },
     isActive:    { type: Boolean, default: true },
   },
