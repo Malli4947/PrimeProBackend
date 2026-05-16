@@ -3,7 +3,7 @@ const Property = require('../models/Property.model');
 const { asyncHandler } = require('../middleware/error.middleware');
 
 // ── Helper: normalise incoming images ─────────────────────────────────────
-// Accepts any of:
+// Accepts:
 //   - Array of { url, publicId?, isPrimary?, caption? } objects
 //   - Array of plain URL strings
 //   - A single URL string
@@ -55,10 +55,11 @@ exports.getCategoryBySlug = asyncHandler(async (req, res) => {
 });
 
 // ── POST /api/categories  (admin) ─────────────────────────────────────────
+// Pass images as URL strings or { url, isPrimary, caption } objects in the body.
+// Example: { "name": "Residential", "images": ["https://...", "https://..."] }
 exports.createCategory = asyncHandler(async (req, res) => {
   const body = { ...req.body };
 
-  // Normalise images — accept files already uploaded (urls in body) or plain URL strings
   if (body.images !== undefined) {
     body.images = normaliseImages(body.images);
     // Keep legacy single `image` field in sync with first image
@@ -70,6 +71,8 @@ exports.createCategory = asyncHandler(async (req, res) => {
 });
 
 // ── PUT /api/categories/:id  (admin) ──────────────────────────────────────
+// Pass images as URL strings or { url, isPrimary, caption } objects.
+// Pass ?append=true to add to existing images instead of replacing.
 exports.updateCategory = asyncHandler(async (req, res) => {
   const body = { ...req.body };
 
@@ -78,7 +81,6 @@ exports.updateCategory = asyncHandler(async (req, res) => {
     if (body.images.length && !body.image) body.image = body.images[0].url;
   }
 
-  // Allow appending images instead of replacing — pass append=true in query
   if (req.query.append === 'true' && body.images?.length) {
     const existing = await Category.findById(req.params.id).select('images');
     if (existing) {
@@ -86,9 +88,69 @@ exports.updateCategory = asyncHandler(async (req, res) => {
     }
   }
 
-  const cat = await Category.findByIdAndUpdate(req.params.id, body, { new: true, runValidators: true });
+  const cat = await Category.findByIdAndUpdate(
+    req.params.id,
+    body,
+    { new: true, runValidators: true }
+  );
   if (!cat) return res.status(404).json({ success: false, message: 'Category not found' });
   res.json({ success: true, message: 'Category updated', category: cat });
+});
+
+// ── POST /api/categories/:id/images  (admin) ──────────────────────────────
+// Add image URLs to a category without touching other fields.
+// Body: { images: ["https://...", ...], append: true/false }
+exports.addCategoryImages = asyncHandler(async (req, res) => {
+  const { images, append = false } = req.body;
+
+  if (!images || !images.length)
+    return res.status(400).json({ success: false, message: '`images` array of URLs is required' });
+
+  const newImages = normaliseImages(Array.isArray(images) ? images : [images]);
+
+  let cat;
+  if (append) {
+    cat = await Category.findByIdAndUpdate(
+      req.params.id,
+      { $push: { images: { $each: newImages } } },
+      { new: true }
+    );
+  } else {
+    cat = await Category.findByIdAndUpdate(
+      req.params.id,
+      { $set: { images: newImages, image: newImages[0]?.url || null } },
+      { new: true }
+    );
+  }
+
+  if (!cat) return res.status(404).json({ success: false, message: 'Category not found' });
+  res.json({ success: true, message: `${newImages.length} image(s) saved`, category: cat });
+});
+
+// ── DELETE /api/categories/:id/images  (admin) ────────────────────────────
+// Remove a specific image URL from a category.
+// Body: { url: "https://..." }
+exports.removeCategoryImage = asyncHandler(async (req, res) => {
+  const { url } = req.body;
+
+  if (!url)
+    return res.status(400).json({ success: false, message: '`url` is required' });
+
+  const cat = await Category.findByIdAndUpdate(
+    req.params.id,
+    { $pull: { images: { url } } },
+    { new: true }
+  );
+
+  if (!cat) return res.status(404).json({ success: false, message: 'Category not found' });
+
+  // Keep legacy image field in sync
+  if (cat.image === url) {
+    cat.image = cat.images[0]?.url || null;
+    await cat.save();
+  }
+
+  res.json({ success: true, message: 'Image removed', category: cat });
 });
 
 // ── DELETE /api/categories/:id  (admin) ───────────────────────────────────

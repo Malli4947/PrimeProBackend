@@ -5,25 +5,28 @@ const { protectAdmin } = require('../middleware/auth.middleware');
 
 /**
  * @swagger
- * /api/cms/upload:
+ * /api/cms/images:
  *   post:
- *     summary: Upload images directly to a CMS key (Admin)
+ *     summary: Attach image URLs to a CMS key (Admin)
  *     description: |
- *       Upload one or more image files (multipart/form-data) and attach them to a CMS key in one step.
+ *       Save one or more image URLs to a CMS key. No file upload — paste links directly.
  *
- *       **Fields:**
- *       - `images`   — one or more image files (field name must be `images`)
- *       - `key`      — the CMS key to attach images to (e.g. `hero`, `banners`)
- *       - `append`   — `"true"` to add to existing images; omit or `"false"` to replace
- *       - `captions` — optional JSON array of caption strings, one per file
+ *       **Body fields:**
+ *       - `key`      — CMS key to attach images to (e.g. `hero`, `banners`)
+ *       - `images`   — array of URL strings or `{ url, caption }` objects
+ *       - `append`   — `true` to add to existing images; `false` (default) to replace
+ *       - `captions` — optional array of caption strings, one per image
  *
- *       **Example (replace hero images):**
- *       ```
- *       POST /api/cms/upload
- *       Content-Type: multipart/form-data
- *       images: [file1.jpg, file2.jpg]
- *       key: hero
- *       append: false
+ *       **Example:**
+ *       ```json
+ *       {
+ *         "key": "hero",
+ *         "images": [
+ *           "https://images.unsplash.com/photo-1600596542815-ffad4c1539a9",
+ *           "https://images.unsplash.com/photo-1560518883-ce09059eeffa"
+ *         ],
+ *         "append": false
+ *       }
  *       ```
  *     tags: [CMS]
  *     security:
@@ -31,41 +34,46 @@ const { protectAdmin } = require('../middleware/auth.middleware');
  *     requestBody:
  *       required: true
  *       content:
- *         multipart/form-data:
+ *         application/json:
  *           schema:
  *             type: object
  *             required: [key, images]
  *             properties:
- *               images:
- *                 type: array
- *                 items:
- *                   type: string
- *                   format: binary
  *               key:
  *                 type: string
  *                 example: hero
+ *               images:
+ *                 type: array
+ *                 items:
+ *                   oneOf:
+ *                     - type: string
+ *                     - type: object
+ *                       properties:
+ *                         url:     { type: string }
+ *                         caption: { type: string }
  *               append:
- *                 type: string
- *                 enum: ["true", "false"]
- *                 default: "false"
+ *                 type: boolean
+ *                 default: false
  *               captions:
- *                 type: string
- *                 description: JSON array of captions e.g. '["Main banner","Secondary"]'
+ *                 type: array
+ *                 items:
+ *                   type: string
  *     responses:
  *       200:
- *         description: Images uploaded and saved
+ *         description: Images saved to CMS key
  *       400:
- *         description: Missing key or no files
+ *         description: Missing key or images
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  */
-router.post('/upload', protectAdmin, ctrl.uploadMiddleware, ctrl.uploadCMSImages);
+router.post('/images', protectAdmin, ctrl.addCMSImages);
 
 /**
  * @swagger
- * /api/cms/{key}/images/{publicId}:
+ * /api/cms/{key}/images/{imageUrl}:
  *   delete:
  *     summary: Remove a single image from a CMS key (Admin)
+ *     description: Pass the image URL encoded as a path param.
  *     tags: [CMS]
  *     security:
  *       - BearerAuth: []
@@ -76,10 +84,10 @@ router.post('/upload', protectAdmin, ctrl.uploadMiddleware, ctrl.uploadCMSImages
  *         schema: { type: string }
  *         example: hero
  *       - in: path
- *         name: publicId
+ *         name: imageUrl
  *         required: true
  *         schema: { type: string }
- *         description: URL-encoded S3 key of the image
+ *         description: URL-encoded image URL to remove
  *     responses:
  *       200:
  *         description: Image removed
@@ -88,48 +96,17 @@ router.post('/upload', protectAdmin, ctrl.uploadMiddleware, ctrl.uploadCMSImages
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  */
-router.delete('/:key/images/:publicId', protectAdmin, ctrl.deleteCMSImage);
+router.delete('/:key/images/:imageUrl', protectAdmin, ctrl.deleteCMSImage);
 
 /**
  * @swagger
  * /api/cms:
  *   get:
  *     summary: Get all CMS content
- *     description: |
- *       Returns all CMS key-value pairs as a single object. Used by the frontend to load dynamic content.
- *
- *       **Standard CMS keys:**
- *       - `hero` — Homepage hero section (title, subtitle, ctaText, backgroundImage)
- *       - `about` — About section (heading, body, yearsExperience, email, phone)
- *       - `seo` — SEO meta tags (metaTitle, metaDescription, keywords)
- *       - `banners` — Promotional banners array
  *     tags: [CMS]
  *     responses:
  *       200:
  *         description: All CMS content as a key-value map
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 cms:
- *                   type: object
- *                   example:
- *                     hero:
- *                       title: Find Your Dream Property in Hyderabad
- *                       subtitle: Discover 1,200+ verified listings. Zero brokerage.
- *                       ctaText: Browse Properties
- *                     about:
- *                       heading: Hyderabad's Most Trusted Real Estate Platform
- *                       yearsExperience: 12
- *                       email: primeproprojects@gmail.com
- *                       phone: 1800 500 600
- *                     seo:
- *                       metaTitle: PrimePro — Premium Real Estate in Hyderabad
- *                       metaDescription: Find verified properties. No brokerage. RERA certified.
  */
 router.get('/', ctrl.getCMS);
 
@@ -138,36 +115,16 @@ router.get('/', ctrl.getCMS);
  * /api/cms/{key}:
  *   get:
  *     summary: Get CMS content by key
- *     description: Returns the value for a specific CMS key.
  *     tags: [CMS]
  *     parameters:
  *       - in: path
  *         name: key
  *         required: true
- *         schema:
- *           type: string
- *         description: CMS key name
+ *         schema: { type: string }
  *         example: hero
  *     responses:
  *       200:
  *         description: CMS key value
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 key:
- *                   type: string
- *                   example: hero
- *                 value:
- *                   type: object
- *                   example:
- *                     title: Find Your Dream Property
- *                     subtitle: Discover 1,200+ verified listings.
- *                     ctaText: Browse Properties
  *       404:
  *         $ref: '#/components/responses/NotFound'
  */
@@ -179,8 +136,9 @@ router.get('/:key', ctrl.getCMSByKey);
  *   post:
  *     summary: Create or update a CMS entry (Admin)
  *     description: |
- *       Upserts a CMS key-value pair. If the key already exists, its value is updated. If not, it is created.
- *       This is how you update the homepage hero, about section, SEO settings, and banners from the admin panel.
+ *       Upserts a CMS key-value pair. Pass `images` as an array of URL strings or
+ *       `{ url, isPrimary, caption }` objects. Set `appendImages: true` to add to
+ *       existing images instead of replacing them.
  *     tags: [CMS]
  *     security:
  *       - BearerAuth: []
@@ -192,15 +150,17 @@ router.get('/:key', ctrl.getCMSByKey);
  *             $ref: '#/components/schemas/CMSUpsertInput'
  *           examples:
  *             updateHero:
- *               summary: Update hero section
+ *               summary: Update hero section with image URLs
  *               value:
  *                 key: hero
  *                 label: Hero Section
  *                 value:
  *                   title: Find Your Dream Property in Hyderabad
- *                   subtitle: Discover 1,200+ verified listings. Zero brokerage. RERA compliant.
+ *                   subtitle: Discover 1,200+ verified listings. Zero brokerage.
  *                   ctaText: Browse Properties
- *                   backgroundImage: https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1600
+ *                 images:
+ *                   - https://images.unsplash.com/photo-1600596542815-ffad4c1539a9
+ *                   - https://images.unsplash.com/photo-1560518883-ce09059eeffa
  *             updateSEO:
  *               summary: Update SEO settings
  *               value:
@@ -208,39 +168,11 @@ router.get('/:key', ctrl.getCMSByKey);
  *                 label: SEO Settings
  *                 value:
  *                   metaTitle: PrimePro — Premium Real Estate in Hyderabad
- *                   metaDescription: Find verified residential, commercial and agricultural properties. No brokerage. RERA certified.
+ *                   metaDescription: Find verified properties. No brokerage. RERA certified.
  *                   keywords: real estate hyderabad, buy flat, villa for sale
- *             updateBanners:
- *               summary: Update promotional banners
- *               value:
- *                 key: banners
- *                 label: Promo Banners
- *                 value:
- *                   - _id: b1
- *                     title: Summer Offer
- *                     subtitle: Free legal consultation with every purchase
- *                     isActive: true
- *                     image: https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800
  *     responses:
  *       200:
  *         description: CMS entry upserted successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: CMS updated
- *                 cms:
- *                   type: object
- *                   properties:
- *                     key:   { type: string, example: hero }
- *                     label: { type: string, example: Hero Section }
- *                     value: { type: object }
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
@@ -253,7 +185,6 @@ router.post('/', protectAdmin, ctrl.upsertCMS);
  * /api/cms/{key}:
  *   delete:
  *     summary: Delete a CMS entry (Admin)
- *     description: Permanently deletes a CMS key-value entry. Use with caution — this will cause the frontend to show default values.
  *     tags: [CMS]
  *     security:
  *       - BearerAuth: []
@@ -261,17 +192,11 @@ router.post('/', protectAdmin, ctrl.upsertCMS);
  *       - in: path
  *         name: key
  *         required: true
- *         schema:
- *           type: string
- *         description: CMS key to delete
+ *         schema: { type: string }
  *         example: banners
  *     responses:
  *       200:
  *         description: CMS key deleted
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/SuccessResponse'
  *       401:
  *         $ref: '#/components/responses/Unauthorized'
  *       403:
